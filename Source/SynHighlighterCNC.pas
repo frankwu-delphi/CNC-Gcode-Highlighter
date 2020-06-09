@@ -49,6 +49,7 @@ type
   tkLcode,   //generic parameter word for G10, M66 and others
   tkMcode,   //Miscellaneous function
   tkNcode,   //Line number
+  tkOcode,   //provide for flow control in NC programs
   tkPcode,   //Dwell time in canned cycles and with G4.
              //Key used with G10.
   tkQcode,   //Feed increment in G73, G83 canned cycles
@@ -94,6 +95,7 @@ type
     FLcodeAttri: TSynHighlighterAttributes;
     FMcodeAttri: TSynHighlighterAttributes;
     FNcodeAttri: TSynHighlighterAttributes;
+    FOcodeAttri: TSynHighlighterAttributes;
     FPcodeAttri: TSynHighlighterAttributes;
     FQcodeAttri: TSynHighlighterAttributes;
     FRcodeAttri: TSynHighlighterAttributes;
@@ -129,6 +131,7 @@ type
     procedure LCodeProc;
     procedure MCodeProc;
     procedure NCodeProc;
+    procedure OCodeProc;
     procedure PCodeProc;
     procedure QCodeProc;
     procedure RCodeProc;
@@ -179,6 +182,7 @@ type
    property LcodeAttri: TSynHighlighterAttributes read FLcodeAttri write FLcodeAttri;
    property McodeAttri: TSynHighlighterAttributes read FMcodeAttri write FMcodeAttri;
    property NcodeAttri: TSynHighlighterAttributes read FNcodeAttri write FNcodeAttri;
+   property OcodeAttri: TSynHighlighterAttributes read FOcodeAttri write FOcodeAttri;
    property PcodeAttri: TSynHighlighterAttributes read FPcodeAttri write FPcodeAttri;
    property QcodeAttri: TSynHighlighterAttributes read FQcodeAttri write FQcodeAttri;
    property RcodeAttri: TSynHighlighterAttributes read FRcodeAttri write FRcodeAttri;
@@ -452,6 +456,11 @@ begin
   FNcodeAttri.Style := [fsItalic];
   AddAttribute(FNcodeAttri);
 
+  // O-Code
+  FOcodeAttri := TSynHighlighterAttributes.Create('CNC O', 'CNC O-Code');
+  FOcodeAttri.Foreground := $0000AFFF;
+  AddAttribute(FOcodeAttri);
+
   // P-Code
   FPcodeAttri := TSynHighlighterAttributes.Create('CNC P', 'CNC P-Code');
   FPcodeAttri.Foreground := $00CCCCCC;
@@ -721,6 +730,24 @@ begin
   end;
 end;
 
+procedure TSynCNCSyn.OCodeProc;
+begin
+  FTokenID := tkNormal;
+  case FLine[Run] of
+    'o':
+      begin
+        while (FLine[Run + 1] in ['0'..'9']) and not IsLineEnd(Run) do
+        inc(Run);
+
+        FTokenID := tkOcode;
+        inc(Run, 1);
+      end
+  else
+    SpaceProc;
+  end;
+end;
+
+
 procedure TSynCNCSyn.PCodeProc;
 begin
   FTokenID := tkNormal;
@@ -912,6 +939,7 @@ begin
       'l': LCodeProc;
       'm': MCodeProc;
       'n': NCodeProc;
+      'o': OCodeProc;
       'p': PCodeProc;
       'q': QCodeProc;
       'r': RCodeProc;
@@ -976,6 +1004,7 @@ begin
     tkLcode: Result := FLcodeAttri;
     tkMcode: Result := FMcodeAttri;
     tkNcode: Result := FNcodeAttri;
+    tkOcode: Result := FOcodeAttri;
     tkPcode: Result := FPcodeAttri;
     tkQcode: Result := FQcodeAttri;
     tkRcode: Result := FRcodeAttri;
