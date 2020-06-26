@@ -1,9 +1,9 @@
-﻿{****************************************************************}
+{****************************************************************}
 {************** CNC G-Code Highlighter For SynEdit **************}
 {*********************Create Date: 2020.06.01********************}
 {****************************************************************}
 //Author: Frank.Wu
-//Version: 1.5
+//Version: 2.1
 //E-mail: 6503597@qq.com
 //GitHub: https://github.com/frankwu-delphi/CNC-Gcode-Highlighter
 //SynEdit: https://github.com/SynEdit/SynEdit
@@ -39,6 +39,7 @@ type
   tkBcode,   //B axis of machine
   tkCcode,   //C axis of machine
   tkDcode,   //Tool radius compensation number
+  tkEcode,
   tkFcode,   //Feed rate
   tkGcode,   //General function
   tkHcode,   //Tool length offset index
@@ -63,16 +64,28 @@ type
   tkYcode,   //Y axis of machine
   tkZcode,   //Z axis of machine
 
-  tkNormal   //Normal text
+  tkNormal,  //Normal text
+
+  tkKey,
+  tkIdentifier
   );
 
   TRangeState = (rsNormal, rsComment);
+
+  TProcTableProc = procedure of object;
+
+  PIdentFuncTableFunc = ^TIdentFuncTableFunc;
+  TIdentFuncTableFunc = function (Index: Integer): TtkTokenKind of object;
 
 type
   TSynCNCSyn = class(TSynCustomHighlighter)
   private
     FRange: TRangeState;
     FTokenID: TtkTokenKind;
+
+    FIdentFuncTable: array[0..78] of TIdentFuncTableFunc;
+    FIdentifierAttri: TSynHighlighterAttributes;
+    FKeyAttri: TSynHighlighterAttributes;
 
     FCommentAttri: TSynHighlighterAttributes;
     FStringAttri: TSynHighlighterAttributes;
@@ -86,6 +99,7 @@ type
     FBcodeAttri: TSynHighlighterAttributes;
     FCcodeAttri: TSynHighlighterAttributes;
     FDcodeAttri: TSynHighlighterAttributes;
+    FEcodeAttri: TSynHighlighterAttributes;
     FFcodeAttri: TSynHighlighterAttributes;
     FGcodeAttri: TSynHighlighterAttributes;
     FHcodeAttri: TSynHighlighterAttributes;
@@ -115,13 +129,14 @@ type
     procedure LFProc;
     procedure CommentOpenProc;
     procedure CommentProc;
-    procedure ReservedWordProc;
+    procedure SymbolProc;
     procedure NumberProc;
 
     procedure ACodeProc;
     procedure BCodeProc;
     procedure CCodeProc;
     procedure DCodeProc;
+    procedure ECodeProc;
     procedure FCodeProc;
     procedure GCodeProc;
     procedure HCodeProc;
@@ -143,6 +158,56 @@ type
     procedure XCodeProc;
     procedure YCodeProc;
     procedure ZCodeProc;
+
+    function HashKey(Str: PWideChar): Cardinal;
+    function FuncAbs(Index: Integer): TtkTokenKind;
+    function FuncAcos(Index: Integer): TtkTokenKind;
+    function FuncAnd(Index: Integer): TtkTokenKind;
+    function FuncAr(Index: Integer): TtkTokenKind;
+    function FuncAsin(Index: Integer): TtkTokenKind;
+    function FuncAtan(Index: Integer): TtkTokenKind;
+    function FuncBcd(Index: Integer): TtkTokenKind;
+    function FuncBin(Index: Integer): TtkTokenKind;
+    function FuncCos(Index: Integer): TtkTokenKind;
+    function FuncDo(Index: Integer): TtkTokenKind;
+    function FuncElse(Index: Integer): TtkTokenKind;
+    function FuncEnd(Index: Integer): TtkTokenKind;
+    function FuncEndif(Index: Integer): TtkTokenKind;
+    function FuncEndw(Index: Integer): TtkTokenKind;
+    function FuncEq(Index: Integer): TtkTokenKind;
+    function FuncExp(Index: Integer): TtkTokenKind;
+    function FuncFalse(Index: Integer): TtkTokenKind;
+    function FuncFix(Index: Integer): TtkTokenKind;
+    function FuncFup(Index: Integer): TtkTokenKind;
+    function FuncGe(Index: Integer): TtkTokenKind;
+    function FuncGoto(Index: Integer): TtkTokenKind;
+    function FuncGt(Index: Integer): TtkTokenKind;
+    function FuncIf(Index: Integer): TtkTokenKind;
+    function FuncInt(Index: Integer): TtkTokenKind;
+    function FuncLe(Index: Integer): TtkTokenKind;
+    function FuncLn(Index: Integer): TtkTokenKind;
+    function FuncLt(Index: Integer): TtkTokenKind;
+    function FuncNe(Index: Integer): TtkTokenKind;
+    function FuncNext(Index: Integer): TtkTokenKind;
+    function FuncNot(Index: Integer): TtkTokenKind;
+    function FuncOr(Index: Integer): TtkTokenKind;
+    function FuncPi(Index: Integer): TtkTokenKind;
+    function FuncRepeart(Index: Integer): TtkTokenKind;
+    function FuncRound(Index: Integer): TtkTokenKind;
+    function FuncSign(Index: Integer): TtkTokenKind;
+    function FuncSin(Index: Integer): TtkTokenKind;
+    function FuncSqrt(Index: Integer): TtkTokenKind;
+    function FuncTan(Index: Integer): TtkTokenKind;
+    function FuncThen(Index: Integer): TtkTokenKind;
+    function FuncTrue(Index: Integer): TtkTokenKind;
+    function FuncWhile(Index: Integer): TtkTokenKind;
+    function FuncXor(Index: Integer): TtkTokenKind;
+
+    procedure IdentProc;
+    function AltFunc(Index: Integer): TtkTokenKind;
+    procedure InitIdent;
+    function IdentKind(MayBe: PWideChar): TtkTokenKind;
+
   protected
     function GetSampleSource: UnicodeString; override;
     function IsFilterStored: Boolean; override;
@@ -156,6 +221,9 @@ type
     function GetDefaultAttribute(Index: Integer): TSynHighlighterAttributes; override;
     function GetEol: Boolean; override;
     function GetTokenID: TtkTokenKind;
+
+    function GetKeyWords(TokenKind: Integer): UnicodeString; override;
+
     function GetTokenAttribute: TSynHighlighterAttributes; override;
     function GetTokenKind: Integer; override;
     function IsIdentChar(AChar: WideChar): Boolean; override;
@@ -169,10 +237,14 @@ type
    property SpaceAttri: TSynHighlighterAttributes read FSpaceAttri write FSpaceAttri;
    property SymbolAttri: TSynHighlighterAttributes read FSymbolAttri write FSymbolAttri;
 
+   property IdentifierAttri: TSynHighlighterAttributes read fIdentifierAttri write fIdentifierAttri;
+   property KeyAttri: TSynHighlighterAttributes read fKeyAttri write fKeyAttri;
+
    property AcodeAttri: TSynHighlighterAttributes read FAcodeAttri write FAcodeAttri;
    property BcodeAttri: TSynHighlighterAttributes read FBcodeAttri write FBcodeAttri;
    property CcodeAttri: TSynHighlighterAttributes read FCcodeAttri write FCcodeAttri;
    property DcodeAttri: TSynHighlighterAttributes read FDcodeAttri write FDcodeAttri;
+   property EcodeAttri: TSynHighlighterAttributes read FEcodeAttri write FEcodeAttri;
    property FcodeAttri: TSynHighlighterAttributes read FFcodeAttri write FFcodeAttri;
    property GcodeAttri: TSynHighlighterAttributes read FGcodeAttri write FGcodeAttri;
    property HcodeAttri: TSynHighlighterAttributes read FHcodeAttri write FHcodeAttri;
@@ -207,7 +279,442 @@ resourcestring
   SYNS_LangCNC = 'CNC';
   SYNS_FriendlyLangCNC = 'CNC G-Code';
 
+const
+  // as this language is case-insensitive keywords *must* be in lowercase
+  KeyWords: array[0..41] of UnicodeString = (
+    'abs', 'acos', 'and', 'ar', 'asin', 'atan', 'bcd', 'bin', 'cos', 'do',
+    'else', 'end', 'endif', 'endw', 'eq', 'exp', 'false', 'fix', 'fup', 'ge',
+    'goto', 'gt', 'if', 'int', 'le', 'ln', 'lt', 'ne', 'next', 'not', 'or',
+    'pi', 'repeart', 'round', 'sign', 'sin', 'sqrt', 'tan', 'then', 'true',
+    'while', 'xor'
+  );
 
+  KeyIndices: array[0..78] of Integer = (
+    4, 19, -1, -1, 26, 10, -1, 0, -1, -1, 27, -1, -1, -1, 23, -1, 14, -1, -1,
+    -1, 6, -1, -1, 13, -1, -1, -1, -1, -1, 8, 24, -1, 1, 15, -1, -1, -1, 40, -1,
+    -1, 9, 31, -1, -1, 28, 17, 25, 38, 7, 3, -1, 34, 41, 22, 21, 32, -1, -1, 33,
+    11, 18, -1, 36, -1, -1, 12, -1, 30, 29, -1, 20, 2, -1, 16, 37, -1, 35, 5, 39
+  );
+
+procedure TSynCNCSyn.InitIdent;
+var
+  i: Integer;
+begin
+  for i := Low(fIdentFuncTable) to High(fIdentFuncTable) do
+    if KeyIndices[i] = -1 then
+      fIdentFuncTable[i] := AltFunc;
+
+  fIdentFuncTable[7] := FuncAbs;
+  fIdentFuncTable[32] := FuncAcos;
+  fIdentFuncTable[71] := FuncAnd;
+  fIdentFuncTable[49] := FuncAr;
+  fIdentFuncTable[0] := FuncAsin;
+  fIdentFuncTable[77] := FuncAtan;
+  fIdentFuncTable[20] := FuncBcd;
+  fIdentFuncTable[48] := FuncBin;
+  fIdentFuncTable[29] := FuncCos;
+  fIdentFuncTable[40] := FuncDo;
+  fIdentFuncTable[5] := FuncElse;
+  fIdentFuncTable[59] := FuncEnd;
+  fIdentFuncTable[65] := FuncEndif;
+  fIdentFuncTable[23] := FuncEndw;
+  fIdentFuncTable[16] := FuncEq;
+  fIdentFuncTable[33] := FuncExp;
+  fIdentFuncTable[73] := FuncFalse;
+  fIdentFuncTable[45] := FuncFix;
+  fIdentFuncTable[60] := FuncFup;
+  fIdentFuncTable[1] := FuncGe;
+  fIdentFuncTable[70] := FuncGoto;
+  fIdentFuncTable[54] := FuncGt;
+  fIdentFuncTable[53] := FuncIf;
+  fIdentFuncTable[14] := FuncInt;
+  fIdentFuncTable[30] := FuncLe;
+  fIdentFuncTable[46] := FuncLn;
+  fIdentFuncTable[4] := FuncLt;
+  fIdentFuncTable[10] := FuncNe;
+  fIdentFuncTable[44] := FuncNext;
+  fIdentFuncTable[68] := FuncNot;
+  fIdentFuncTable[67] := FuncOr;
+  fIdentFuncTable[41] := FuncPi;
+  fIdentFuncTable[55] := FuncRepeart;
+  fIdentFuncTable[58] := FuncRound;
+  fIdentFuncTable[51] := FuncSign;
+  fIdentFuncTable[76] := FuncSin;
+  fIdentFuncTable[62] := FuncSqrt;
+  fIdentFuncTable[74] := FuncTan;
+  fIdentFuncTable[47] := FuncThen;
+  fIdentFuncTable[78] := FuncTrue;
+  fIdentFuncTable[37] := FuncWhile;
+  fIdentFuncTable[52] := FuncXor;
+end;
+
+{$Q-}
+function TSynCNCSyn.HashKey(Str: PWideChar): Cardinal;
+begin
+  Result := 0;
+  while IsIdentChar(Str^) do
+  begin
+    Result := Result * 577 + Ord(Str^) * 151;
+    inc(Str);
+  end;
+  Result := Result mod 79;
+  fStringLen := Str - fToIdent;
+end;
+{$Q+}
+
+
+function TSynCNCSyn.FuncAbs(Index: Integer): TtkTokenKind;
+begin
+  if IsCurrentToken(KeyWords[Index]) then
+    Result := tkKey
+  else
+    Result := tkIdentifier;
+end;
+
+function TSynCNCSyn.FuncAcos(Index: Integer): TtkTokenKind;
+begin
+  if IsCurrentToken(KeyWords[Index]) then
+    Result := tkKey
+  else
+    Result := tkIdentifier;
+end;
+
+function TSynCNCSyn.FuncAnd(Index: Integer): TtkTokenKind;
+begin
+  if IsCurrentToken(KeyWords[Index]) then
+    Result := tkKey
+  else
+    Result := tkIdentifier;
+end;
+
+function TSynCNCSyn.FuncAr(Index: Integer): TtkTokenKind;
+begin
+  if IsCurrentToken(KeyWords[Index]) then
+    Result := tkKey
+  else
+    Result := tkIdentifier;
+end;
+
+function TSynCNCSyn.FuncAsin(Index: Integer): TtkTokenKind;
+begin
+  if IsCurrentToken(KeyWords[Index]) then
+    Result := tkKey
+  else
+    Result := tkIdentifier;
+end;
+
+function TSynCNCSyn.FuncAtan(Index: Integer): TtkTokenKind;
+begin
+  if IsCurrentToken(KeyWords[Index]) then
+    Result := tkKey
+  else
+    Result := tkIdentifier;
+end;
+
+function TSynCNCSyn.FuncBcd(Index: Integer): TtkTokenKind;
+begin
+  if IsCurrentToken(KeyWords[Index]) then
+    Result := tkKey
+  else
+    Result := tkIdentifier;
+end;
+
+function TSynCNCSyn.FuncBin(Index: Integer): TtkTokenKind;
+begin
+  if IsCurrentToken(KeyWords[Index]) then
+    Result := tkKey
+  else
+    Result := tkIdentifier;
+end;
+
+function TSynCNCSyn.FuncCos(Index: Integer): TtkTokenKind;
+begin
+  if IsCurrentToken(KeyWords[Index]) then
+    Result := tkKey
+  else
+    Result := tkIdentifier;
+end;
+
+function TSynCNCSyn.FuncDo(Index: Integer): TtkTokenKind;
+begin
+  if IsCurrentToken(KeyWords[Index]) then
+    Result := tkKey
+  else
+    Result := tkIdentifier;
+end;
+
+function TSynCNCSyn.FuncElse(Index: Integer): TtkTokenKind;
+begin
+  if IsCurrentToken(KeyWords[Index]) then
+    Result := tkKey
+  else
+    Result := tkIdentifier;
+end;
+
+function TSynCNCSyn.FuncEnd(Index: Integer): TtkTokenKind;
+begin
+  if IsCurrentToken(KeyWords[Index]) then
+    Result := tkKey
+  else
+    Result := tkIdentifier;
+end;
+
+function TSynCNCSyn.FuncEndif(Index: Integer): TtkTokenKind;
+begin
+  if IsCurrentToken(KeyWords[Index]) then
+    Result := tkKey
+  else
+    Result := tkIdentifier;
+end;
+
+function TSynCNCSyn.FuncEndw(Index: Integer): TtkTokenKind;
+begin
+  if IsCurrentToken(KeyWords[Index]) then
+    Result := tkKey
+  else
+    Result := tkIdentifier;
+end;
+
+function TSynCNCSyn.FuncEq(Index: Integer): TtkTokenKind;
+begin
+  if IsCurrentToken(KeyWords[Index]) then
+    Result := tkKey
+  else
+    Result := tkIdentifier;
+end;
+
+function TSynCNCSyn.FuncExp(Index: Integer): TtkTokenKind;
+begin
+  if IsCurrentToken(KeyWords[Index]) then
+    Result := tkKey
+  else
+    Result := tkIdentifier;
+end;
+
+function TSynCNCSyn.FuncFalse(Index: Integer): TtkTokenKind;
+begin
+  if IsCurrentToken(KeyWords[Index]) then
+    Result := tkKey
+  else
+    Result := tkIdentifier;
+end;
+
+function TSynCNCSyn.FuncFix(Index: Integer): TtkTokenKind;
+begin
+  if IsCurrentToken(KeyWords[Index]) then
+    Result := tkKey
+  else
+    Result := tkIdentifier;
+end;
+
+function TSynCNCSyn.FuncFup(Index: Integer): TtkTokenKind;
+begin
+  if IsCurrentToken(KeyWords[Index]) then
+    Result := tkKey
+  else
+    Result := tkIdentifier;
+end;
+
+function TSynCNCSyn.FuncGe(Index: Integer): TtkTokenKind;
+begin
+  if IsCurrentToken(KeyWords[Index]) then
+    Result := tkKey
+  else
+    Result := tkIdentifier;
+end;
+
+function TSynCNCSyn.FuncGoto(Index: Integer): TtkTokenKind;
+begin
+  if IsCurrentToken(KeyWords[Index]) then
+    Result := tkKey
+  else
+    Result := tkIdentifier;
+end;
+
+function TSynCNCSyn.FuncGt(Index: Integer): TtkTokenKind;
+begin
+  if IsCurrentToken(KeyWords[Index]) then
+    Result := tkKey
+  else
+    Result := tkIdentifier;
+end;
+
+function TSynCNCSyn.FuncIf(Index: Integer): TtkTokenKind;
+begin
+  if IsCurrentToken(KeyWords[Index]) then
+    Result := tkKey
+  else
+    Result := tkIdentifier;
+end;
+
+function TSynCNCSyn.FuncInt(Index: Integer): TtkTokenKind;
+begin
+  if IsCurrentToken(KeyWords[Index]) then
+    Result := tkKey
+  else
+    Result := tkIdentifier;
+end;
+
+function TSynCNCSyn.FuncLe(Index: Integer): TtkTokenKind;
+begin
+  if IsCurrentToken(KeyWords[Index]) then
+    Result := tkKey
+  else
+    Result := tkIdentifier;
+end;
+
+function TSynCNCSyn.FuncLn(Index: Integer): TtkTokenKind;
+begin
+  if IsCurrentToken(KeyWords[Index]) then
+    Result := tkKey
+  else
+    Result := tkIdentifier;
+end;
+
+function TSynCNCSyn.FuncLt(Index: Integer): TtkTokenKind;
+begin
+  if IsCurrentToken(KeyWords[Index]) then
+    Result := tkKey
+  else
+    Result := tkIdentifier;
+end;
+
+function TSynCNCSyn.FuncNe(Index: Integer): TtkTokenKind;
+begin
+  if IsCurrentToken(KeyWords[Index]) then
+    Result := tkKey
+  else
+    Result := tkIdentifier;
+end;
+
+function TSynCNCSyn.FuncNext(Index: Integer): TtkTokenKind;
+begin
+  if IsCurrentToken(KeyWords[Index]) then
+    Result := tkKey
+  else
+    Result := tkIdentifier;
+end;
+
+function TSynCNCSyn.FuncNot(Index: Integer): TtkTokenKind;
+begin
+  if IsCurrentToken(KeyWords[Index]) then
+    Result := tkKey
+  else
+    Result := tkIdentifier;
+end;
+
+function TSynCNCSyn.FuncOr(Index: Integer): TtkTokenKind;
+begin
+  if IsCurrentToken(KeyWords[Index]) then
+    Result := tkKey
+  else
+    Result := tkIdentifier;
+end;
+
+function TSynCNCSyn.FuncPi(Index: Integer): TtkTokenKind;
+begin
+  if IsCurrentToken(KeyWords[Index]) then
+    Result := tkKey
+  else
+    Result := tkIdentifier;
+end;
+
+function TSynCNCSyn.FuncRepeart(Index: Integer): TtkTokenKind;
+begin
+  if IsCurrentToken(KeyWords[Index]) then
+    Result := tkKey
+  else
+    Result := tkIdentifier;
+end;
+
+function TSynCNCSyn.FuncRound(Index: Integer): TtkTokenKind;
+begin
+  if IsCurrentToken(KeyWords[Index]) then
+    Result := tkKey
+  else
+    Result := tkIdentifier;
+end;
+
+function TSynCNCSyn.FuncSign(Index: Integer): TtkTokenKind;
+begin
+  if IsCurrentToken(KeyWords[Index]) then
+    Result := tkKey
+  else
+    Result := tkIdentifier;
+end;
+
+function TSynCNCSyn.FuncSin(Index: Integer): TtkTokenKind;
+begin
+  if IsCurrentToken(KeyWords[Index]) then
+    Result := tkKey
+  else
+    Result := tkIdentifier;
+end;
+
+function TSynCNCSyn.FuncSqrt(Index: Integer): TtkTokenKind;
+begin
+  if IsCurrentToken(KeyWords[Index]) then
+    Result := tkKey
+  else
+    Result := tkIdentifier;
+end;
+
+function TSynCNCSyn.FuncTan(Index: Integer): TtkTokenKind;
+begin
+  if IsCurrentToken(KeyWords[Index]) then
+    Result := tkKey
+  else
+    Result := tkIdentifier;
+end;
+
+function TSynCNCSyn.FuncThen(Index: Integer): TtkTokenKind;
+begin
+  if IsCurrentToken(KeyWords[Index]) then
+    Result := tkKey
+  else
+    Result := tkIdentifier;
+end;
+
+function TSynCNCSyn.FuncTrue(Index: Integer): TtkTokenKind;
+begin
+  if IsCurrentToken(KeyWords[Index]) then
+    Result := tkKey
+  else
+    Result := tkIdentifier;
+end;
+
+function TSynCNCSyn.FuncWhile(Index: Integer): TtkTokenKind;
+begin
+  if IsCurrentToken(KeyWords[Index]) then
+    Result := tkKey
+  else
+    Result := tkIdentifier;
+end;
+
+function TSynCNCSyn.FuncXor(Index: Integer): TtkTokenKind;
+begin
+  if IsCurrentToken(KeyWords[Index]) then
+    Result := tkKey
+  else
+    Result := tkIdentifier;
+end;
+
+function TSynCNCSyn.AltFunc(Index: Integer): TtkTokenKind;
+begin
+  Result := tkIdentifier;
+end;
+
+function TSynCNCSyn.IdentKind(MayBe: PWideChar): TtkTokenKind;
+var
+  Key: Cardinal;
+begin
+  fToIdent := MayBe;
+  Key := HashKey(MayBe);
+  if Key <= High(fIdentFuncTable) then
+    Result := fIdentFuncTable[Key](KeyIndices[Key])
+  else
+    Result := tkIdentifier;
+end;
 
 procedure TSynCNCSyn.SpaceProc;
 begin
@@ -267,22 +774,28 @@ begin
   end;
 end;
 
-procedure TSynCNCSyn.ReservedWordProc;
+procedure TSynCNCSyn.SymbolProc;
 begin
   FTokenID := tkNormal;
   case FLine[Run] of
-    '%':
+    '%','[',']','#','@','^','*':
       begin
-        FTokenID := tkReserved;
+        FTokenID := tkSymbol;
         inc(Run, 1);
-      end
+      end;
+     ';':
+     begin
+       FTokenID := tkComment;
+       repeat
+          inc(Run, 1);
+       until IsLineEnd(Run);
+     end
   else
     SpaceProc;
   end;
 end;
 
 procedure TSynCNCSyn.NumberProc;
-
   function ExpectDigit: Boolean;
   begin
     Result := CharInSet(FLine[Run], ['0' .. '9']);
@@ -322,23 +835,23 @@ begin
   end;
 
   // check for an exponent
-  if CharInSet(FLine[Run], ['e', 'E']) then
-  begin
-    inc(Run);
-
-    // allow +/- here
-    if CharInSet(FLine[Run], ['+', '-']) then
-      inc(Run);
-
-    // at least any digit must appear here
-    if not ExpectDigit then
-    begin
-      FTokenID := tkNormal;
-      while (FLine[Run] <> #32) and not IsLineEnd(Run) do
-        inc(Run);
-      Exit;
-    end;
-  end;
+//  if CharInSet(FLine[Run], ['e', 'E']) then
+//  begin
+//    inc(Run);
+//
+//    // allow +/- here
+//    if CharInSet(FLine[Run], ['+', '-']) then
+//      inc(Run);
+//
+//    // at least any digit must appear here
+//    if not ExpectDigit then
+//    begin
+//      FTokenID := tkNormal;
+//      while (FLine[Run] <> #32) and not IsLineEnd(Run) do
+//        inc(Run);
+//      Exit;
+//    end;
+//  end;
 end;
 
 constructor TSynCNCSyn.Create(AOwner: TComponent);
@@ -410,6 +923,11 @@ begin
   FDcodeAttri.Foreground := $002D902C;
   AddAttribute(FDcodeAttri);
 
+  // E-Code
+  FEcodeAttri := TSynHighlighterAttributes.Create('CNC E', 'CNC E-Code');
+  FEcodeAttri.Foreground := $002D902C;
+  AddAttribute(FEcodeAttri);
+
   // F-Code
   FFcodeAttri := TSynHighlighterAttributes.Create('CNC F', 'CNC F-Code');
   FFcodeAttri.Foreground := $00CC9852;
@@ -447,7 +965,7 @@ begin
 
   // M-Code
   FMcodeAttri := TSynHighlighterAttributes.Create('CNC M', 'CNC M-Code');
-  FMcodeAttri.Foreground := $006070EB;
+  FMcodeAttri.Foreground := $00FDDC57;
   AddAttribute(FMcodeAttri);
 
   // N-Code
@@ -522,8 +1040,17 @@ begin
   FZcodeAttri.Style := [fsBold];
   AddAttribute(FZcodeAttri);
 
-  SetAttributesOnChange(DefHighlightChange);
+  FIdentifierAttri := TSynHighLighterAttributes.Create(SYNS_AttrIdentifier, SYNS_FriendlyAttrIdentifier);
+  AddAttribute(FIdentifierAttri);
 
+  //Marco func
+  FKeyAttri := TSynHighLighterAttributes.Create(SYNS_AttrReservedWord+'Keys', SYNS_FriendlyAttrReservedWord);
+  FKeyAttri.Foreground := $0084E7BC;
+  FKeyAttri.Style := [fsBold];
+  AddAttribute(FKeyAttri);
+
+  SetAttributesOnChange(DefHighlightChange);
+  InitIdent;
   FDefaultFilter := SYNS_FilterCNC;
   FRange := rsNormal;
 end;
@@ -534,14 +1061,54 @@ begin
   FTokenID := tkNormal;
 end;
 
-procedure TSynCNCSyn.ACodeProc;
+procedure TSynCNCSyn.IdentProc;
 begin
+  FTokenID := IdentKind(FLine + Run);
+  inc(Run, FStringLen);
+  while IsIdentChar(FLine[Run]) do
+    Inc(Run);
+end;
+
+procedure TSynCNCSyn.ACodeProc;
+begin  //'abs', 'acos', 'and', 'ar', 'asin', 'atan'
   FTokenID := tkNormal;
   case FLine[Run] of
     'a':
       begin
+      if ((FLine[Run+1] = 'b') and (FLine[Run+2] = 's'))then //abs
+      begin
+        FTokenID := tkKey;
+        inc(Run, 3);
+      end else
+      if ((FLine[Run+1] = 'c') and (FLine[Run+2] = 'o') and (FLine[Run+3] = 's'))then //acos
+      begin
+        FTokenID := tkKey;
+        inc(Run, 4);
+      end else
+      if ((FLine[Run+1] = 'n') and (FLine[Run+2] = 'd'))then  //and
+      begin
+        FTokenID := tkKey;
+        inc(Run, 3);
+      end else
+      if ((FLine[Run+1] = 'r'))then  //ar
+      begin
+        FTokenID := tkKey;
+        inc(Run, 2);
+      end else
+      if ((FLine[Run+1] = 's') and (FLine[Run+2] = 'i') and (FLine[Run+3] = 'n'))then  //asin
+      begin
+        FTokenID := tkKey;
+        inc(Run, 4);
+      end else
+      if ((FLine[Run+1] = 't') and (FLine[Run+2] = 'a') and (FLine[Run+3] = 'n'))then  //atan
+      begin
+        FTokenID := tkKey;
+        inc(Run, 4);
+      end else
+      begin
         FTokenID := tkAcode;
         inc(Run, 1);
+      end;
       end
   else
     SpaceProc;
@@ -549,13 +1116,25 @@ begin
 end;
 
 procedure TSynCNCSyn.BCodeProc;
-begin
+begin //'bcd', 'bin',
   FTokenID := tkNormal;
   case FLine[Run] of
     'b':
       begin
+      if ((FLine[Run+1] = 'c') and (FLine[Run+2] = 'd'))then //bcd
+      begin
+        FTokenID := tkKey;
+        inc(Run, 3);
+      end else
+      if ((FLine[Run+1] = 'i') and (FLine[Run+2] = 'n'))then //bin
+      begin
+        FTokenID := tkKey;
+        inc(Run, 3);
+      end else
+      begin
         FTokenID := tkBcode;
         inc(Run, 1);
+      end;
       end
   else
     SpaceProc;
@@ -563,13 +1142,20 @@ begin
 end;
 
 procedure TSynCNCSyn.CCodeProc;
-begin
+begin //'cos'
   FTokenID := tkNormal;
   case FLine[Run] of
     'c':
       begin
+      if ((FLine[Run+1] = 'o') and (FLine[Run+2] = 's'))then //cos
+      begin
+        FTokenID := tkKey;
+        inc(Run, 3);
+      end else
+      begin
         FTokenID := tkCcode;
         inc(Run, 1);
+      end;
       end
   else
     SpaceProc;
@@ -577,13 +1163,66 @@ begin
 end;
 
 procedure TSynCNCSyn.DCodeProc;
-begin
+begin //'do'
   FTokenID := tkNormal;
   case FLine[Run] of
     'd':
       begin
+      if ((FLine[Run+1] = 'o'))then //do
+      begin
+        FTokenID := tkKey;
+        inc(Run, 2);
+      end else
+      begin
         FTokenID := tkDcode;
         inc(Run, 1);
+      end;
+      end
+  else
+    SpaceProc;
+  end;
+end;
+
+procedure TSynCNCSyn.ECodeProc;
+begin // 'else', 'end', 'endif', 'endw', 'eq', 'exp',
+  FTokenID := tkNormal;
+  case FLine[Run] of
+    'e':
+      begin
+        if ((FLine[Run+1] = 'l') and (FLine[Run+2] = 's') and (FLine[Run+3] = 'e'))then //else
+        begin
+          FTokenID := tkKey;
+          inc(Run, 4);
+        end else
+        if ((FLine[Run+1] = 'n') and (FLine[Run+2] = 'd') and (FLine[Run+3] = 'i') and (FLine[Run+4] = 'f'))then //endif
+        begin
+          FTokenID := tkKey;
+          inc(Run, 5);
+        end else
+        if ((FLine[Run+1] = 'n') and (FLine[Run+2] = 'd') and (FLine[Run+3] = 'w'))then //endw
+        begin
+          FTokenID := tkKey;
+          inc(Run, 4);
+        end else
+        if ((FLine[Run+1] = 'n') and (FLine[Run+2] = 'd'))then //end
+        begin
+          FTokenID := tkKey;
+          inc(Run, 3);
+        end else
+        if ((FLine[Run+1] = 'q'))then //eq
+        begin
+          FTokenID := tkKey;
+          inc(Run, 2);
+        end else
+        if ((FLine[Run+1] = 'x') and (FLine[Run+2] = 'p'))then //exp
+        begin
+          FTokenID := tkKey;
+          inc(Run, 3);
+        end else
+        begin
+          FTokenID := tkEcode;
+          inc(Run, 1);
+        end;
       end
   else
     SpaceProc;
@@ -591,16 +1230,34 @@ begin
 end;
 
 procedure TSynCNCSyn.FCodeProc;
-begin
+begin  //'false', 'fix', 'fup',
   FTokenID := tkNormal;
   case FLine[Run] of
     'f':
       begin
-        while (FLine[Run + 1] in ['0'..'9','.']) and not IsLineEnd(Run) do
-        inc(Run);
+        if ((FLine[Run+1] = 'a') and (FLine[Run+2] = 'l') and (FLine[Run+3] = 's')
+          and (FLine[Run+4] = 'e')) then //false
+        begin
+          FTokenID := tkKey;
+          inc(Run, 5);
+        end else
+        if ((FLine[Run+1] = 'i') and (FLine[Run+2] = 'x')) then //fix
+        begin
+          FTokenID := tkKey;
+          inc(Run, 3);
+        end else
+        if ((FLine[Run+1] = 'u') and (FLine[Run+2] = 'p')) then //fup
+        begin
+          FTokenID := tkKey;
+          inc(Run, 3);
+        end else
+        begin
+          while (FLine[Run + 1] in ['0'..'9','.']) and not IsLineEnd(Run) do
+          inc(Run);
 
-        FTokenID := tkFcode;
-        inc(Run, 1);
+          FTokenID := tkFcode;
+          inc(Run, 1);
+        end;
       end
   else
     SpaceProc;
@@ -610,16 +1267,33 @@ end;
 procedure TSynCNCSyn.GCodeProc;
 var
   i: Integer;
-begin
+begin   //'ge', 'goto', 'gt',
   FTokenID := tkNormal;
   case FLine[Run] of
     'g':
       begin
-        while (FLine[Run + 1] in ['0'..'9']) and not IsLineEnd(Run) do
-        inc(Run);
+        if ((FLine[Run+1] = 'e')) then //ge
+        begin
+          FTokenID := tkKey;
+            inc(Run, 2);
+        end else
+        if ((FLine[Run+1] = 'o') and (FLine[Run+2] = 't') and (FLine[Run+3] = 'o')) then //goto
+        begin
+          FTokenID := tkKey;
+            inc(Run, 4);
+        end else
+        if ((FLine[Run+1] = 't')) then //gt
+        begin
+          FTokenID := tkKey;
+            inc(Run, 2);
+        end else
+        begin
+          while (FLine[Run + 1] in ['0'..'9']) and not IsLineEnd(Run) do
+          inc(Run);
 
-        FTokenID := tkGcode;
-        inc(Run, 1);
+          FTokenID := tkGcode;
+          inc(Run, 1);
+        end;
       end
   else
     SpaceProc;
@@ -641,13 +1315,25 @@ begin
 end;
 
 procedure TSynCNCSyn.ICodeProc;
-begin
+begin  //'if', 'int'
   FTokenID := tkNormal;
   case FLine[Run] of
     'i':
       begin
-        FTokenID := tkIcode;
-        inc(Run, 1);
+        if ((FLine[Run+1] = 'f')) then //if
+        begin
+          FTokenID := tkKey;
+            inc(Run, 2);
+        end else
+        if ((FLine[Run+1] = 'n') and (FLine[Run+2] = 't')) then //int
+        begin
+          FTokenID := tkKey;
+            inc(Run, 3);
+        end else
+        begin
+          FTokenID := tkIcode;
+          inc(Run, 1);
+        end;
       end
   else
     SpaceProc;
@@ -683,13 +1369,30 @@ begin
 end;
 
 procedure TSynCNCSyn.LCodeProc;
-begin
+begin  //'le', 'ln', 'lt',
   FTokenID := tkNormal;
   case FLine[Run] of
     'l':
       begin
-        FTokenID := tkLcode;
-        inc(Run, 1);
+        if ((FLine[Run+1] = 'e')) then //le
+        begin
+          FTokenID := tkKey;
+            inc(Run, 2);
+        end else
+        if ((FLine[Run+1] = 'n')) then //ln
+        begin
+          FTokenID := tkKey;
+            inc(Run, 2);
+        end else
+        if ((FLine[Run+1] = 't')) then //lt
+        begin
+          FTokenID := tkKey;
+            inc(Run, 2);
+        end else
+        begin
+          FTokenID := tkLcode;
+          inc(Run, 1);
+        end;
       end
   else
     SpaceProc;
@@ -714,16 +1417,33 @@ begin
 end;
 
 procedure TSynCNCSyn.NCodeProc;
-begin
+begin  //'ne', 'next', 'not'
   FTokenID := tkNormal;
   case FLine[Run] of
     'n':
       begin
-        while (FLine[Run + 1] in ['0'..'9']) and not IsLineEnd(Run) do
-        inc(Run);
+        if ((FLine[Run+1] = 'e') and (FLine[Run+2] = 'x') and (FLine[Run+3] = 't')) then //next
+        begin
+          FTokenID := tkKey;
+            inc(Run, 4);
+        end else
+        if ((FLine[Run+1] = 'o') and (FLine[Run+2] = 't')) then //not
+        begin
+          FTokenID := tkKey;
+            inc(Run, 3);
+        end else
+        if ((FLine[Run+1] = 'e')) then //ne
+        begin
+          FTokenID := tkKey;
+            inc(Run, 2);
+        end else
+        begin
+          while (FLine[Run + 1] in ['0'..'9']) and not IsLineEnd(Run) do
+          inc(Run);
 
-        FTokenID := tkNcode;
-        inc(Run, 1);
+          FTokenID := tkNcode;
+          inc(Run, 1);
+        end;
       end
   else
     SpaceProc;
@@ -731,16 +1451,23 @@ begin
 end;
 
 procedure TSynCNCSyn.OCodeProc;
-begin
+begin//'or'
   FTokenID := tkNormal;
   case FLine[Run] of
     'o':
       begin
-        while (FLine[Run + 1] in ['0'..'9']) and not IsLineEnd(Run) do
-        inc(Run);
+        if ((FLine[Run+1] = 'r')) then //or
+        begin
+          FTokenID := tkKey;
+            inc(Run, 2);
+        end else
+        begin
+          while (FLine[Run + 1] in ['0'..'9']) and not IsLineEnd(Run) do
+          inc(Run);
 
-        FTokenID := tkOcode;
-        inc(Run, 1);
+          FTokenID := tkOcode;
+          inc(Run, 1);
+        end;
       end
   else
     SpaceProc;
@@ -749,13 +1476,20 @@ end;
 
 
 procedure TSynCNCSyn.PCodeProc;
-begin
+begin //'pi'
   FTokenID := tkNormal;
   case FLine[Run] of
     'p':
       begin
-        FTokenID := tkPcode;
-        inc(Run, 1);
+        if ((FLine[Run+1] = 'i')) then //pi
+        begin
+          FTokenID := tkKey;
+            inc(Run, 2);
+        end else
+        begin
+          FTokenID := tkPcode;
+          inc(Run, 1);
+        end;
       end
   else
     SpaceProc;
@@ -777,16 +1511,30 @@ begin
 end;
 
 procedure TSynCNCSyn.RCodeProc;
-begin
+begin   //'repeart', 'round'
   FTokenID := tkNormal;
   case FLine[Run] of
     'r':
       begin
-        while (FLine[Run + 1] in ['0'..'9','.']) and not IsLineEnd(Run) do
-        inc(Run);
+        if ((FLine[Run+1] = 'e') and (FLine[Run+2] = 'p') and (FLine[Run+3] = 'e')
+          and (FLine[Run+4] = 'a') and (FLine[Run+5] = 'r') and (FLine[Run+6] = 't')) then //repeart
+          begin
+            FTokenID := tkKey;
+              inc(Run, 7);
+          end else
+        if ((FLine[Run+1] = 'o') and (FLine[Run+2] = 'u') and (FLine[Run+3] = 'n')
+          and (FLine[Run+4] = 'd')) then //round
+          begin
+            FTokenID := tkKey;
+              inc(Run, 5);
+          end else
+        begin
+          while (FLine[Run + 1] in ['0'..'9','.']) and not IsLineEnd(Run) do
+          inc(Run);
 
-        FTokenID := tkRcode;
-        inc(Run, 1);
+          FTokenID := tkRcode;
+          inc(Run, 1);
+        end;
       end
   else
     SpaceProc;
@@ -794,16 +1542,33 @@ begin
 end;
 
 procedure TSynCNCSyn.SCodeProc;
-begin
+begin  //'sign', 'sin', 'sqrt'
   FTokenID := tkNormal;
   case FLine[Run] of
     's':
       begin
-        while (FLine[Run + 1] in ['0'..'9']) and not IsLineEnd(Run) do
-        inc(Run);
+        if ((FLine[Run+1] = 'i') and (FLine[Run+2] = 'g') and (FLine[Run+3] = 'n')) then //sign
+        begin
+          FTokenID := tkKey;
+            inc(Run, 4);
+        end else
+        if ((FLine[Run+1] = 'i') and (FLine[Run+2] = 'n')) then //sin
+        begin
+          FTokenID := tkKey;
+            inc(Run, 3);
+        end else
+        if ((FLine[Run+1] = 'q') and (FLine[Run+2] = 'r') and (FLine[Run+3] = 't')) then //sqrt
+        begin
+          FTokenID := tkKey;
+            inc(Run, 4);
+        end else
+        begin
+          while (FLine[Run + 1] in ['0'..'9']) and not IsLineEnd(Run) do
+          inc(Run);
 
-        FTokenID := tkScode;
-        inc(Run, 1);
+          FTokenID := tkScode;
+          inc(Run, 1);
+        end;
       end
   else
     SpaceProc;
@@ -811,21 +1576,39 @@ begin
 end;
 
 procedure TSynCNCSyn.TCodeProc;
-begin
+begin   //'tan', 'then', 'true'
   FTokenID := tkNormal;
   case FLine[Run] of
     't':
       begin
-        while (FLine[Run + 1] in ['0'..'9']) and not IsLineEnd(Run) do
-        inc(Run);
+        if ((FLine[Run+1] = 'a') and (FLine[Run+2] = 'n')) then //tan
+        begin
+          FTokenID := tkKey;
+            inc(Run, 3);
+        end else
+        if ((FLine[Run+1] = 'h') and (FLine[Run+2] = 'e') and (FLine[Run+3] = 'n')) then //then
+        begin
+          FTokenID := tkKey;
+            inc(Run, 4);
+        end else
+        if ((FLine[Run+1] = 'r') and (FLine[Run+2] = 'u') and (FLine[Run+3] = 'e')) then //true
+        begin
+          FTokenID := tkKey;
+            inc(Run, 4);
+        end else
+        begin
+          while (FLine[Run + 1] in ['0'..'9']) and not IsLineEnd(Run) do
+          inc(Run);
 
-        FTokenID := tkTcode;
-        inc(Run, 1);
+          FTokenID := tkTcode;
+          inc(Run, 1);
+        end;
       end
   else
     SpaceProc;
   end;
 end;
+
 
 procedure TSynCNCSyn.UCodeProc;
 begin
@@ -856,13 +1639,21 @@ begin
 end;
 
 procedure TSynCNCSyn.WCodeProc;
-begin
+begin  // 'while'
   FTokenID := tkNormal;
   case FLine[Run] of
     'w':
       begin
-        FTokenID := tkWcode;
-        inc(Run, 1);
+        if ((FLine[Run+1] = 'h') and (FLine[Run+2] = 'i') and (FLine[Run+3] = 'l')
+          and (FLine[Run+4] = 'e')) then //while
+        begin
+          FTokenID := tkKey;
+            inc(Run, 5);
+        end else
+        begin
+          FTokenID := tkWcode;
+          inc(Run, 1);
+        end;
       end
   else
     SpaceProc;
@@ -870,13 +1661,20 @@ begin
 end;
 
 procedure TSynCNCSyn.XCodeProc;
-begin
+begin //'xor'
   FTokenID := tkNormal;
   case FLine[Run] of
     'x':
       begin
-        FTokenID := tkXcode;
-        inc(Run, 1);
+      if ((FLine[Run+1] = 'o') and (FLine[Run+2] = 'r')) then //xor
+        begin
+          FTokenID := tkKey;
+          inc(Run, 3);
+        end else
+        begin
+          FTokenID := tkXcode;
+          inc(Run, 1);
+        end;
       end
   else
     SpaceProc;
@@ -924,12 +1722,14 @@ begin
       '(': CommentOpenProc;
       #1 .. #9, #11, #12, #14 .. #32: SpaceProc;
       '0' .. '9': NumberProc;
-      '%': ReservedWordProc;
+      '%','[',']','#','@','^','*', ';': SymbolProc;
+//       'A'..'Z', 'a'..'z', '_': IdentProc;
 
       'a': ACodeProc;
       'b': BCodeProc;
       'c': CCodeProc;
       'd': DCodeProc;
+      'e': ECodeProc;
       'f': FCodeProc;
       'g': GCodeProc;
       'h': HCodeProc;
@@ -951,6 +1751,7 @@ begin
       'x': XCodeProc;
       'y': YCodeProc;
       'z': ZCodeProc;
+
     else
       NormalProc;
     end;
@@ -975,6 +1776,14 @@ begin
   Result := Run = FLineLen + 1;
 end;
 
+function TSynCNCSyn.GetKeyWords(TokenKind: Integer): UnicodeString;
+begin
+  Result :=
+    'ABS,ACos,AND,AR,ASin,ATan,BCD,BIN,Cos,DO,ELSE,END,ENDIF,ENDW,EQ,EXP,F' +
+    'alse,FIX,FUP,GE,GOTO,GT,IF,INT,LE,LN,LT,NE,NEXT,NOT,OR,PI,REPEART,ROUN' +
+    'D,SIGN,Sin,SQRT,Tan,THEN,True,WHILE,XOR';
+end;
+
 function TSynCNCSyn.GetTokenID: TtkTokenKind;
 begin
   Result := FTokenID;
@@ -991,10 +1800,14 @@ begin
     tkSpace: Result := FSpaceAttri;
     tkSymbol: Result := FSymbolAttri;
 
+    tkKey: Result := FKeyAttri;
+    tkIdentifier: Result := FIdentifierAttri;
+
     tkAcode: Result := FAcodeAttri;
     tkBcode: Result := FBcodeAttri;
     tkCcode: Result := FCcodeAttri;
     tkDcode: Result := FDcodeAttri;
+    tkEcode: Result := FEcodeAttri;
     tkFcode: Result := FFcodeAttri;
     tkGcode: Result := FGcodeAttri;
     tkHcode: Result := FHcodeAttri;
